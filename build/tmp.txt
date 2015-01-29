@@ -1,8 +1,0 @@
-Scanning dependencies of target snemo_gamma_tracking_efficiency
-[100%] Building CXX object CMakeFiles/snemo_gamma_tracking_efficiency.dir/snemo_gamma_tracking_efficiency_module.cc.o
-CMakeFiles/snemo_gamma_tracking_efficiency.dir/build.make:54: recipe for target 'CMakeFiles/snemo_gamma_tracking_efficiency.dir/snemo_gamma_tracking_efficiency_module.cc.o' failed
-make[2]: *** [CMakeFiles/snemo_gamma_tracking_efficiency.dir/snemo_gamma_tracking_efficiency_module.cc.o] Interrompre
-CMakeFiles/Makefile2:60: recipe for target 'CMakeFiles/snemo_gamma_tracking_efficiency.dir/all' failed
-make[1]: *** [CMakeFiles/snemo_gamma_tracking_efficiency.dir/all] Interrompre
-Makefile:113: recipe for target 'all' failed
-make: *** [all] Interrompre
