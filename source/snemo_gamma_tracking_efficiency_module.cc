@@ -32,6 +32,7 @@
 #include <snemo/processing/services.h>
 #include <snemo/datamodels/data_model.h>
 #include <snemo/datamodels/calibrated_data.h>
+#include <snemo/datamodels/event_header.h>
 #include <snemo/datamodels/particle_track.h>
 #include <snemo/datamodels/particle_track_data.h>
 #include <snemo/geometry/locator_plugin.h>
@@ -51,7 +52,6 @@ namespace analysis {
   // Set the histogram pool used by the module :
   void snemo_gamma_tracking_efficiency_module::set_histogram_pool(mygsl::histogram_pool & pool_)
   {
-    // std::cout<<"---DEBUG set pool---"<<std::endl;
     DT_THROW_IF(is_initialized(), std::logic_error,
                 "Module '" << get_name() << "' is already initialized !");
     _histogram_pool_ = &pool_;
@@ -61,7 +61,6 @@ namespace analysis {
   // Grab the histogram pool used by the module :
   mygsl::histogram_pool & snemo_gamma_tracking_efficiency_module::grab_histogram_pool()
   {
-    // std::cout<<"---DEBUG grab pool---"<<std::endl;
     DT_THROW_IF(! is_initialized(), std::logic_error,
                 "Module '" << get_name() << "' is not initialized !");
     return *_histogram_pool_;
@@ -237,7 +236,7 @@ namespace analysis {
     return;
   }
 
-  // Get the new calibrated neighbours
+  // Explore the cluster
   void snemo_gamma_tracking_efficiency_module::get_new_neighbours(geomtools::geom_id gid,
                                                                   const snemo::datamodel::calibrated_data::calorimeter_hit_collection_type & cch,
                                                                   std::vector<geomtools::geom_id>  & ccl,
@@ -294,8 +293,26 @@ namespace analysis {
     const snemo::datamodel::calibrated_data & cd
       = data_record_.get<snemo::datamodel::calibrated_data>(cd_label);
 
-    const snemo::datamodel::calibrated_data::calorimeter_hit_collection_type & cch
-      = cd.calibrated_calorimeter_hits();
+    // Check if some 'particle_track_data' are available in the data model:
+    const std::string ptd_label = snemo::datamodel::data_info::default_particle_track_data_label();
+    if (! data_record_.has(ptd_label)) {
+      DT_LOG_ERROR(get_logging_priority(), "Missing particle track data to be processed !");
+    }
+
+    // Get the 'particle_track_data' entry from the data model :
+    const snemo::datamodel::particle_track_data & ptd
+      = data_record_.get<snemo::datamodel::particle_track_data>(ptd_label);
+
+    snemo::datamodel::particle_track_data::particle_collection_type gamma_particles;
+    ptd.fetch_particles(gamma_particles, snemo::datamodel::particle_track::NEUTRAL);
+
+    // retrieve only hits from gammas
+    snemo::datamodel::calibrated_calorimeter_hit::collection_type cch;
+
+    for(auto igamma : gamma_particles) {
+      snemo::datamodel::particle_track a_gamma = igamma.grab();
+      cch.insert(cch.end(),a_gamma.get_associated_calorimeter_hits().begin(),a_gamma.get_associated_calorimeter_hits().end());
+    }
 
     std::vector<geomtools::geom_id>  ccl = {};
 
@@ -329,14 +346,9 @@ namespace analysis {
        for(auto igid : icluster)
           for(auto ihit : cch)
             if(igid == ihit.get().get_geom_id())
-              {
                 a_cluster.insert( std::pair<double,geomtools::geom_id >(ihit.get().get_time(),igid) );
-              }
 
        the_ordered_reconstructed_clusters.push_back(a_cluster);
-       // std::cout << std::endl;
-        // const geomtools::blur_spot & next_spot = std::next(&ivtx)->get();
-
       }
 
     std::sort(the_ordered_reconstructed_clusters.begin(), the_ordered_reconstructed_clusters.end());
@@ -364,7 +376,7 @@ namespace analysis {
             // std::cout << " " << ipair.first  << "   " << std::next(&ipair)->first << std::endl;
             // std::cout << " " << t0  << "   " << t1 << std::endl;
 
-            if(t0!=0 && t1!=0 && t1-t0 > 2.5)
+            if(t0!=0 && t1!=0 && t1-t0 > 2.5 /*ns*/)
               {
                 number_of_clusters++;
                 track_id++;
@@ -375,17 +387,20 @@ namespace analysis {
 
       }
 
-    // for (auto igamma : clustered_gammas_) {
-    //   std::set<geomtools::geom_id> gid_list = igamma.second;
+    // Check if some 'event_header' are available in the data model:
+    const std::string eh_label = snemo::datamodel::data_info::default_event_header_label();
+    if (! data_record_.has(eh_label)) {
+      DT_LOG_ERROR(get_logging_priority(), "Missing event header info !");
+    }
 
-    //   for(auto igid : gid_list)
-    //     std::cout<< "  " << igid;
-
-    //   std::cout<< std::endl;
-    // }
+    // Get the 'event_header' entry from the data model :
+    const snemo::datamodel::event_header & eh
+      = data_record_.get<snemo::datamodel::event_header>(eh_label);
 
     // if(number_of_clusters == 4)
-    //   _no_gt_efficiency_.no_gt_ngood_event++;
+    //   std::cout << eh.get_id() << std::endl;
+
+    // _no_gt_efficiency_.no_gt_ngood_event++;
   }
 
 // Processing :
@@ -395,7 +410,7 @@ dpp::base_module::process_status snemo_gamma_tracking_efficiency_module::process
   DT_THROW_IF(! is_initialized(), std::logic_error,
               "Module '" << get_name() << "' is not initialized !");
 
-  std::cout << " ---------------------------------------------------------------------------------- " << std::endl;
+   std::cout << " ---------------------------------------------------------------------------------- " << std::endl;
 
   gamma_dict_type clustered_gammas;
   {
@@ -513,8 +528,6 @@ dpp::base_module::process_status snemo_gamma_tracking_efficiency_module::_proces
                      ) == cch.end()
         ) continue;
 
-    // if(cch.size()>=5)
-    // DT_LOG_WARNING(get_logging_priority(), "---------------------  "<< cch.size() <<std::endl);
 
     // if(simulated_gammas_[track_id].size() != 0 )
     //   {
@@ -568,8 +581,6 @@ dpp::base_module::process_status snemo_gamma_tracking_efficiency_module::_proces
 
 dpp::base_module::process_status snemo_gamma_tracking_efficiency_module::_compute_gamma_track_length(const datatools::things & data_record_)
 {
-
-  /***** Comparing simu and reco gamma track length    *****/
 
   // Check if some 'simulated_data' are available in the data model:
   const std::string sd_label = snemo::datamodel::data_info::default_simulated_data_label();
@@ -640,28 +651,7 @@ dpp::base_module::process_status snemo_gamma_tracking_efficiency_module::_comput
     const snemo::datamodel::particle_track::vertex_collection_type the_vertices = igamma.get().get_vertices();
 
     unsigned int count_vtx = 0;
-    // // std::map <int,vector<double> > vertices;
-    // std::vector<double> x_values;
-    // std::vector<double> y_values;
-    // std::vector<double> z_values;
-    // for (auto ivtx : the_vertices)
-    //   {
-    //     count_vtx++;
-    //     const geomtools::blur_spot & a_spot = ivtx.get();
-    //     x_values.push_back(a_spot.get_position().x());
-    //     y_values.push_back(a_spot.get_position().y());
-    //     z_values.push_back(a_spot.get_position().z());
-    //     // vertices[count_vtx].pushback(a_spot.get_position().x)
-    //   }
 
-    // for(size_t i = 0; i<x_values.size()-1; i++)
-    //   {
-    //     reco_gamma_track_length += sqrt(
-    //                                     pow(x_values[i]-x_values[i+1],2) +
-    //                                     pow(y_values[i]-y_values[i+1],2) +
-    //                                                    pow(z_values[i]-z_values[i+1],2)
-    //                                     );
-    //   }
     for (auto ivtx : the_vertices)
       {
         // count_vtx++;
@@ -957,7 +947,7 @@ bool snemo_gamma_tracking_efficiency_module::_compare_sequences(const gamma_dict
     }
 
   if (simulated_gammas_.size() > 1) {
-    DT_LOG_WARNING(datatools::logger::PRIO_WARNING, "More than one gammas simulated");
+    //*    DT_LOG_WARNING(datatools::logger::PRIO_WARNING, "More than one gammas simulated");
   }
   if (simulated_gammas_.size() == 0) {
     DT_LOG_WARNING(datatools::logger::PRIO_WARNING, "No gammas simulated");
@@ -997,8 +987,8 @@ bool snemo_gamma_tracking_efficiency_module::_compare_sequences(const gamma_dict
         DT_LOG_DEBUG(get_logging_priority(), "Sequences are identical !");
         break;
       }
-      else
-        DT_LOG_WARNING(get_logging_priority(), "Sequences are different !");
+      //* else
+        //* DT_LOG_WARNING(get_logging_priority(), "Sequences are different !");
     }
   }
 
@@ -1020,27 +1010,20 @@ bool snemo_gamma_tracking_efficiency_module::_compare_sequences(const gamma_dict
 bool snemo_gamma_tracking_efficiency_module::_compare_sequences_cluster(const gamma_dict_type & simulated_gammas_,
                                                                 const gamma_dict_type & clustered_gammas_)
 {
-  // _efficiency_.nevent++;
-
   if (clustered_gammas_.empty() && simulated_gammas_.empty())
     {
       DT_LOG_DEBUG(get_logging_priority(), "No gammas have been catched and clustered !");
-      //_efficiency_.nmiss++;
       return false;
     }
-
-  // _efficiency_.ntotal += simulated_gammas_.size();
-
-  //  std::cout << "simulated gamma size " <<simulated_gammas_.size() << std::endl;
 
   if(simulated_gammas_.size()>0)
     {
       _no_gt_efficiency_.no_gt_nevent_gammas++;
     }
 
-  if (simulated_gammas_.size() > 1) {
-    DT_LOG_WARNING(datatools::logger::PRIO_WARNING, "Cluster : More than one gammas simulated");
-  }
+  //* if (simulated_gammas_.size() > 1) {
+  //   DT_LOG_WARNING(datatools::logger::PRIO_WARNING, "Cluster : More than one gammas simulated");
+  // }
 
   if (simulated_gammas_.size() == 0) {
     DT_LOG_WARNING(datatools::logger::PRIO_WARNING, "Cluster : No gammas simulated");
@@ -1075,13 +1058,12 @@ bool snemo_gamma_tracking_efficiency_module::_compare_sequences_cluster(const ga
       if (a_rec_list.size() != a_sim_list.size()) continue;
       const bool are_same = std::equal(a_rec_list.begin(), a_rec_list.end(), a_sim_list.begin());
       if (are_same) {
-        //_efficiency_.ngood++;
         tmp_ngood_gammas++;
         DT_LOG_DEBUG(get_logging_priority(), "Sequences are identical !");
         break;
       }
-      else
-        DT_LOG_WARNING(get_logging_priority(), "Sequences are different !");
+      // else
+      //   DT_LOG_WARNING(get_logging_priority(), "Sequences are different !");
     }
   }
 
