@@ -211,9 +211,8 @@ namespace analysis {
                    << " ( " << _efficiency_.ngood_event/(double)_efficiency_.nevent_gammas*100 << " %)");
 
     DT_LOG_WARNING(get_logging_priority(),
-                   "Gamma Clustering : Number of events with gammas successfully reconstructed = " << _no_gt_efficiency_.no_gt_ngood_event << " / " << _no_gt_efficiency_.no_gt_nevent_gammas
+                   "Number of events with gammas successfully clustered = " << _no_gt_efficiency_.no_gt_ngood_event << " / " << _no_gt_efficiency_.no_gt_nevent_gammas
                    << " ( " << _no_gt_efficiency_.no_gt_ngood_event/(double)_no_gt_efficiency_.no_gt_nevent_gammas*100 << " %)");
-
 
     // Tag the module as un-initialized :
     _set_initialized(false);
@@ -283,15 +282,15 @@ namespace analysis {
   void snemo_gamma_tracking_efficiency_module::_pre_process_clustering(const datatools::things & data_record_,
                                                                        gamma_dict_type & clustered_gammas_)
   {
-    // Check if some 'calibrated_data' are available in the data model:
-    const std::string cd_label = snemo::datamodel::data_info::default_calibrated_data_label();
-    if (! data_record_.has(cd_label)) {
-      DT_LOG_ERROR(get_logging_priority(), "Missing calibrated data to be processed !");
-    }
+    // // Check if some 'calibrated_data' are available in the data model:
+    // const std::string cd_label = snemo::datamodel::data_info::default_calibrated_data_label();
+    // if (! data_record_.has(cd_label)) {
+    //   DT_LOG_ERROR(get_logging_priority(), "Missing calibrated data to be processed !");
+    // }
 
-    // Get the 'calibrated_data' entry from the data model :
-    const snemo::datamodel::calibrated_data & cd
-      = data_record_.get<snemo::datamodel::calibrated_data>(cd_label);
+    // // Get the 'calibrated_data' entry from the data model :
+    // const snemo::datamodel::calibrated_data & cd
+    //   = data_record_.get<snemo::datamodel::calibrated_data>(cd_label);
 
     // Check if some 'particle_track_data' are available in the data model:
     const std::string ptd_label = snemo::datamodel::data_info::default_particle_track_data_label();
@@ -313,6 +312,8 @@ namespace analysis {
       snemo::datamodel::particle_track a_gamma = igamma.grab();
       cch.insert(cch.end(),a_gamma.get_associated_calorimeter_hits().begin(),a_gamma.get_associated_calorimeter_hits().end());
     }
+
+    // std::cout << " cch size " << cch.size() << std::endl;
 
     std::vector<geomtools::geom_id>  ccl = {};
 
@@ -384,7 +385,6 @@ namespace analysis {
 
             clustered_gammas_[track_id].insert(ipair.second);
           }
-
       }
 
     // Check if some 'event_header' are available in the data model:
@@ -400,7 +400,76 @@ namespace analysis {
     // if(number_of_clusters == 4)
     //   std::cout << eh.get_id() << std::endl;
 
+    // Build unique key for histogram map:
+    std::ostringstream key;
+    key << "number_of_gamma_calos";
+
+    // Getting histogram pool
+    mygsl::histogram_pool & a_pool = grab_histogram_pool();
+
+    if (! a_pool.has(key.str()))
+      {
+        mygsl::histogram_1d & h = a_pool.add_1d(key.str(), "", "number_of_gamma_calos");
+        datatools::properties hconfig;
+        hconfig.store_string("mode", "mimic");
+        hconfig.store_string("mimic.histogram_1d", "number_of_calos_template");
+        mygsl::histogram_pool::init_histo_1d(h, hconfig, &a_pool);
+      }
+
+    // Getting the current histogram
+    mygsl::histogram_1d & a_histo_gamma_calos = a_pool.grab_1d(key.str ());
+    a_histo_gamma_calos.fill(cch.size());
+
+    key.str("");
+    key.clear();
+
+    // // Build unique key for histogram map:
+    // std::ostringstream key;
+    key << "number_of_gamma_clusters";
+
+    // // Getting histogram pool
+    // mygsl::histogram_pool & a_pool = grab_histogram_pool();
+
+    if (! a_pool.has(key.str()))
+      {
+        mygsl::histogram_1d & h = a_pool.add_1d(key.str(), "", "number_of_gamma_clusters");
+        datatools::properties hconfig;
+        hconfig.store_string("mode", "mimic");
+        hconfig.store_string("mimic.histogram_1d", "number_of_calos_template");
+        mygsl::histogram_pool::init_histo_1d(h, hconfig, &a_pool);
+      }
+
+    // Getting the current histogram
+    mygsl::histogram_1d & a_histo_gamma_clusters = a_pool.grab_1d(key.str ());
+    a_histo_gamma_clusters.fill(number_of_clusters);
+
+        key.str("");
+    key.clear();
+
+    // // Build unique key for histogram map:
+    // std::ostringstream key;
+    key << "clusters_size";
+
+    // // Getting histogram pool
+    // mygsl::histogram_pool & a_pool = grab_histogram_pool();
+
+    if (! a_pool.has(key.str()))
+      {
+        mygsl::histogram_1d & h = a_pool.add_1d(key.str(), "", "clusters_size");
+        datatools::properties hconfig;
+        hconfig.store_string("mode", "mimic");
+        hconfig.store_string("mimic.histogram_1d", "number_of_calos_template");
+        mygsl::histogram_pool::init_histo_1d(h, hconfig, &a_pool);
+      }
+
+    // Getting the current histogram
+    mygsl::histogram_1d & a_histo_clusters_size = a_pool.grab_1d(key.str ());
+
+    for (auto igamma : clustered_gammas_)
+        a_histo_clusters_size.fill(igamma.second.size());
+
     // _no_gt_efficiency_.no_gt_ngood_event++;
+
   }
 
 // Processing :
@@ -410,7 +479,7 @@ dpp::base_module::process_status snemo_gamma_tracking_efficiency_module::process
   DT_THROW_IF(! is_initialized(), std::logic_error,
               "Module '" << get_name() << "' is not initialized !");
 
-   std::cout << " ---------------------------------------------------------------------------------- " << std::endl;
+   // std::cout << " ---------------------------------------------------------------------------------- " << std::endl;
 
   gamma_dict_type clustered_gammas;
   {
@@ -487,7 +556,8 @@ dpp::base_module::process_status snemo_gamma_tracking_efficiency_module::_proces
   if (get_logging_priority() >= datatools::logger::PRIO_DEBUG) cd.tree_dump();
 
   // Stop proccess if no calibrated calorimeters
-  if (! cd.has_calibrated_calorimeter_hits()) return dpp::base_module::PROCESS_STOP;
+  if (! cd.has_calibrated_calorimeter_hits())
+    return dpp::base_module::PROCESS_STOP;
 
   const snemo::datamodel::calibrated_data::calorimeter_hit_collection_type & cch
     = cd.calibrated_calorimeter_hits();
@@ -542,7 +612,7 @@ dpp::base_module::process_status snemo_gamma_tracking_efficiency_module::_proces
         continue;
       }
 
-    if (track_id > (int)_efficiency_.ngamma + 1) //continue; // Not from a primary particles
+    if (track_id > (int)_efficiency_.ngamma + 1) //continue; // Not from a primary particles // Hack : removes around 10% of the stat
       {
         DT_LOG_WARNING(get_logging_priority(), "Secondary particle triggering new calo "<< _efficiency_.ngamma);
         return dpp::base_module::PROCESS_STOP;
@@ -556,7 +626,7 @@ dpp::base_module::process_status snemo_gamma_tracking_efficiency_module::_proces
 
     // Build unique key for histogram map:
     std::ostringstream key;
-    key << "number_of_calos";
+    key << "total_number_of_calos";
 
     // Getting histogram pool
     mygsl::histogram_pool & a_pool = grab_histogram_pool();
@@ -573,6 +643,9 @@ dpp::base_module::process_status snemo_gamma_tracking_efficiency_module::_proces
     // Getting the current histogram
     mygsl::histogram_1d & a_histo = a_pool.grab_1d(key.str ());
     a_histo.fill(cch.size());
+
+    // std::cout << " simulated cch size " << cch.size() <<std::endl;
+
 
   }
 
@@ -684,7 +757,6 @@ dpp::base_module::process_status snemo_gamma_tracking_efficiency_module::_comput
 
     const snemo::datamodel::calibrated_data::calorimeter_hit_collection_type & cch
       = cd.calibrated_calorimeter_hits();
-
 
     // Build unique key for histogram map:
     std::ostringstream key;
